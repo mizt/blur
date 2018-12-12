@@ -78,9 +78,9 @@ class MetalUniform {
 };
 
 
-class MetalLayer {
+class MetalLayerBase {
     
-    private:
+    protected:
     
         NSMutableString *filename;
     
@@ -158,7 +158,7 @@ class MetalLayer {
             return false;
         }
     
-        bool setup() {
+        bool setupMetal() {
             
             this->metalLayer =  [CAMetalLayer layer];
             this->device = MTLCreateSystemDefaultDevice();
@@ -203,13 +203,9 @@ class MetalLayer {
             this->argumentEncoderBuffer = [this->device newBufferWithLength:sizeof(float)*[this->argumentEncoder encodedLength] options:MTLResourceOptionCPUCacheModeDefault];
             [this->argumentEncoder setArgumentBuffer:this->argumentEncoderBuffer offset:0];
             
-            [this->argumentEncoder setBuffer:MetalUniform::$()->time() offset:0 atIndex:0];
-            [this->argumentEncoder setBuffer:this->resolutionBuffer offset:0 atIndex:1];
-            [this->argumentEncoder setBuffer:MetalUniform::$()->mouse() offset:0 atIndex:2];
-            [this->argumentEncoder setTexture:this->textureBuffer atIndex:3];
-            
+            this->setup();
+           
             return true;
-            
         }
     
         id<MTLCommandBuffer> setupCommandBuffer() {
@@ -231,7 +227,6 @@ class MetalLayer {
                 
                 id<MTLCommandBuffer> commandBuffer = [this->commandQueue commandBuffer];
                 
-                
                 MTLRenderPassColorAttachmentDescriptor *colorAttachment = this->renderPassDescriptor.colorAttachments[0];
                 colorAttachment.texture = this->metalDrawable.texture;
                 colorAttachment.loadAction  = MTLLoadActionClear;
@@ -246,11 +241,7 @@ class MetalLayer {
                 [renderEncoder setVertexBuffer:this->vertexBuffer offset:0 atIndex:0];
                 [renderEncoder setVertexBuffer:this->texcoordBuffer offset:0 atIndex:1];
                 
-                [renderEncoder useResource:MetalUniform::$()->time() usage:MTLResourceUsageRead];
-                [renderEncoder useResource:this->resolutionBuffer usage:MTLResourceUsageRead];
-                [renderEncoder useResource:MetalUniform::$()->mouse() usage:MTLResourceUsageRead];
-                
-                [renderEncoder useResource:this->textureBuffer usage:MTLResourceUsageSample];
+                this->set(renderEncoder);
                 
                 [renderEncoder setFragmentBuffer:this->argumentEncoderBuffer offset:0 atIndex:0];
                 
@@ -265,6 +256,9 @@ class MetalLayer {
             
             return nil;
         }
+    
+        virtual void setup() = 0;
+        virtual void set(id<MTLRenderCommandEncoder> renderEncoder) = 0;
     
     public:
     
@@ -282,28 +276,59 @@ class MetalLayer {
         
         void cleanup() { this->metalDrawable = nil; }
     
+        void update(void (^onComplete)(id<MTLCommandBuffer>)=nil) {
+             
+            if(this->renderPipelineState) {
+                id<MTLCommandBuffer> commandBuffer = this->setupCommandBuffer();
+                if(commandBuffer) {
+                    if(onComplete) [commandBuffer addCompletedHandler:onComplete];
+                    [commandBuffer commit];
+                }
+            }
+        }
+    
+        MetalLayerBase() {
+            
+        }
+    
+        ~MetalLayerBase() {
+            
+        }
+                 
+};
+
+class MetalLayer : public MetalLayerBase {
+    
+    private:
+    
+        void setup() {
+          
+            [this->argumentEncoder setBuffer:MetalUniform::$()->time() offset:0 atIndex:0];
+            [this->argumentEncoder setBuffer:this->resolutionBuffer offset:0 atIndex:1];
+            [this->argumentEncoder setBuffer:MetalUniform::$()->mouse() offset:0 atIndex:2];
+            [this->argumentEncoder setTexture:this->textureBuffer atIndex:3];
+            
+        }
+    
+        void set(id<MTLRenderCommandEncoder> renderEncoder) {
+            
+            [renderEncoder useResource:MetalUniform::$()->time() usage:MTLResourceUsageRead];
+            [renderEncoder useResource:MetalUniform::$()->mouse() usage:MTLResourceUsageRead];
+            [renderEncoder useResource:this->resolutionBuffer usage:MTLResourceUsageRead];
+            [renderEncoder useResource:this->textureBuffer usage:MTLResourceUsageSample];
+            
+        }
+    
+    public:
+    
         MetalLayer(NSString *fileName, NSString *prefix, CGRect frame, bool framebuffer) {
             
             this->filename = [NSMutableString stringWithString:[[NSBundle mainBundle] pathForResource:fileName ofType:@"metallib"]];
             this->rect = frame;
             this->framebufferOnly = framebuffer;
             this->prefix = prefix;
-            this->setup();
+            this->setupMetal();
         }
-                 
-         void update(void (^onComplete)(id<MTLCommandBuffer>)=nil) {
-             
-             if(this->renderPipelineState) {
-                 id<MTLCommandBuffer> commandBuffer = this->setupCommandBuffer();
-                 if(commandBuffer) {
-                     if(onComplete) [commandBuffer addCompletedHandler:onComplete];
-                     [commandBuffer commit];
-                 }
-             }
-         }
     
-         ~MetalLayer() {
-             
-         }
-                 
+    
 };
