@@ -18,7 +18,6 @@
     }
 @end
 
-
 class Metal {
   
     private:
@@ -33,23 +32,20 @@ class Metal {
     
     public:
     
-    
         Metal() {
         
             this->win = [[NSWindow alloc] initWithContentRect:CGRectMake(0,0,W,H) styleMask:1 backing:NSBackingStoreBuffered defer:NO];
             
-            this->horizontalBlur = new MetalLayer(@"horizontalBlur",CGRectMake(0,0,W,H),true);
-            
-            this->verticalBlur = new MetalLayer(@"verticalBlur",CGRectMake(0,0,W,H),false);
+            this->horizontalBlur = new MetalLayer(@"default",@"horizontalBlur",CGRectMake(0,0,W,H),true);
+            this->verticalBlur = new MetalLayer(@"default",@"verticalBlur",CGRectMake(0,0,W,H),false);
             this->metalview = [[MetalView alloc] init:this->verticalBlur];
-            
             
             [[this->win contentView] addSubview:this->metalview];
             [this->win center];
         }
         
         void render(unsigned int *buffer) {
-            
+                        
             this->horizontalBlur->cleanup();
             [this->horizontalBlur->texture() replaceRegion:MTLRegionMake2D(0,0,W,H) mipmapLevel:0 withBytes:buffer bytesPerRow:W<<2];
             this->horizontalBlur->update(^(id<MTLCommandBuffer> commandBuffer){
@@ -60,7 +56,7 @@ class Metal {
             
             this->verticalBlur->cleanup();
             this->verticalBlur->texture(this->horizontalBlur->drawableTexture());
-            this->verticalBlur->update(nil);
+            this->verticalBlur->update();
             
             static dispatch_once_t predicate;
             dispatch_once(&predicate,^{

@@ -55,7 +55,6 @@ class MetalLayer {
     
         CGRect _frame;
         double _starttime;
-        double _timestamp;
     
         bool _framebufferOnly;
     
@@ -110,11 +109,7 @@ class MetalLayer {
             return false;
         }
     
-    
         bool setup() {
-            
-            _timestamp = -1;
-            
             
             _starttime = CFAbsoluteTimeGetCurrent();
             
@@ -205,7 +200,7 @@ class MetalLayer {
                 double w = _frame.size.width;
                 double h = _frame.size.height;
                 
-                NSPoint mouseLoc = [NSEvent mouseLocation]; //get current mouse position
+                NSPoint mouseLoc = [NSEvent mouseLocation];
                 mouseBuffer[0] = (mouseLoc.x-x)/w;
                 mouseBuffer[1] = (mouseLoc.y-y)/h;
                 
@@ -245,34 +240,30 @@ class MetalLayer {
     
     public:
     
-        id<MTLTexture> texture() { return _texture; }
+        CGRect frame() { return _frame; }
     
-        void texture(id<MTLTexture> drawableTexture) {
-            _texture = drawableTexture;
-            [_argumentEncoder setTexture:_texture atIndex:3];
+        CAMetalLayer *layer() { return _metalLayer; };
+    
+        id<MTLTexture> texture() { return _texture; }
+
+        void texture(id<MTLTexture> texture) {
+            [_argumentEncoder setTexture:texture atIndex:3];
         }
         
         id<MTLTexture> drawableTexture() { return _drawabletexture; }
         
         void cleanup() { _metalDrawable = nil; }
     
-    
-        CAMetalLayer *layer() { return _metalLayer; };
-    
-    CGRect frame() { return _frame; }
-    
-                 
-        MetalLayer(NSString *prefix,CGRect frame,bool framebuffer) {
+        MetalLayer(NSString *fileName, NSString *prefix, CGRect frame, bool framebuffer) {
             
-            _filename = [NSMutableString stringWithString:[[NSBundle mainBundle] pathForResource:@"default" ofType:@"metallib"]];
+            _filename = [NSMutableString stringWithString:[[NSBundle mainBundle] pathForResource:fileName ofType:@"metallib"]];
             _frame = frame;
             _framebufferOnly = framebuffer;
             _prefix = prefix;
-            
             this->setup();
         }
                  
-         void update(void (^onComplete)(id<MTLCommandBuffer>)) {
+         void update(void (^onComplete)(id<MTLCommandBuffer>)=nil) {
              
              if(_renderPipelineState) {
                  id<MTLCommandBuffer> commandBuffer = this->setupCommandBuffer();
