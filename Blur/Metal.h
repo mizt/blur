@@ -45,6 +45,8 @@ class Metal {
         }
         
         void render(unsigned int *buffer) {
+            
+            MetalUniform::$()->update([this->win frame]);
                         
             this->horizontalBlur->cleanup();
             [this->horizontalBlur->texture() replaceRegion:MTLRegionMake2D(0,0,W,H) mipmapLevel:0 withBytes:buffer bytesPerRow:W<<2];

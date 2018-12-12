@@ -1,5 +1,4 @@
 #import <Cocoa/Cocoa.h>
-#import <AVFoundation/AVFoundation.h>
 
 #define FrameRate 30
 #define W 1280

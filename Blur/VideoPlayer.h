@@ -1,3 +1,5 @@
+#import <AVFoundation/AVFoundation.h>
+
 class VideoPlayer {
 	
 	private:
@@ -11,7 +13,6 @@ class VideoPlayer {
 		dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 	
 	public:
-	
 	
 		VideoPlayer(NSString *filePath) {
 			

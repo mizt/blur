@@ -21,73 +21,122 @@ namespace Plane {
     };
 }
 
+#import <Foundation/Foundation.h>
+
+class MetalUniform {
+    
+    private:
+    
+        id<MTLBuffer> timeBuffer;
+        id<MTLBuffer> mouseBuffer;
+
+        double starttime;
+    
+        MetalUniform() {
+            
+            this->starttime = CFAbsoluteTimeGetCurrent();
+            
+            id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+            
+            this->timeBuffer = [device newBufferWithLength:sizeof(float) options:MTLResourceOptionCPUCacheModeDefault];
+            this->mouseBuffer = [device newBufferWithLength:sizeof(float)*2 options:MTLResourceOptionCPUCacheModeDefault];
+        }
+    
+        MetalUniform(const MetalUniform &me) {}
+        virtual ~MetalUniform() {}
+    
+    public:
+    
+        static MetalUniform *$() {
+            static MetalUniform *instance=nullptr;
+            if(instance==nullptr) {
+                instance = new MetalUniform();
+            }
+            return instance;
+        }
+    
+        id<MTLBuffer> mouse() { return this->mouseBuffer; }
+        id<MTLBuffer> time() { return this->timeBuffer; }
+    
+        void update(CGRect frame) {
+            
+            float *timeBuffer = (float *)[this->timeBuffer contents];
+            timeBuffer[0] = CFAbsoluteTimeGetCurrent()-this->starttime;
+            
+            float *mouseBuffer = (float *)[this->mouseBuffer contents];
+            
+            double x = frame.origin.x;
+            double y = frame.origin.y;
+            double w = frame.size.width;
+            double h = frame.size.height;
+            
+            NSPoint mouseLoc = [NSEvent mouseLocation]; //get current mouse position
+            mouseBuffer[0] = (mouseLoc.x-x)/w;
+            mouseBuffer[1] = (mouseLoc.y-y)/h;
+            
+        }
+};
+
+
 class MetalLayer {
     
     private:
     
-        NSMutableString *_filename;
+        NSMutableString *filename;
     
-        CAMetalLayer *_metalLayer;
-        MTLRenderPassDescriptor *_renderPassDescriptor;
+        CAMetalLayer *metalLayer;
+        MTLRenderPassDescriptor *renderPassDescriptor;
     
-        id<MTLDevice> _device;
-        id<MTLCommandQueue> _commandQueue;
-        id<MTLLibrary> _library;
-        id<MTLRenderPipelineState> _renderPipelineState;
-        id<CAMetalDrawable> _metalDrawable;
+        id<MTLDevice> device;
+        id<MTLCommandQueue> commandQueue;
+        id<MTLLibrary> library;
+        id<MTLRenderPipelineState> renderPipelineState;
+        id<CAMetalDrawable> metalDrawable;
     
-        id<MTLTexture> _drawabletexture;
+        id<MTLTexture> drawabletexture;
+        id<MTLTexture> textureBuffer;
+        id<MTLBuffer> resolutionBuffer;
+        id<MTLBuffer> vertexBuffer;
+        id<MTLBuffer> texcoordBuffer;
     
-        id<MTLTexture> _texture;
+        id<MTLArgumentEncoder> argumentEncoder;
+        id<MTLBuffer> argumentEncoderBuffer;
+        MTLRenderPipelineDescriptor *renderPipelineDescriptor;
     
-        id<MTLBuffer> _timeBuffer;
-        id<MTLBuffer> _resolutionBuffer;
-        id<MTLBuffer> _mouseBuffer;
+        CGRect rect;
+
+        bool framebufferOnly;
     
-    
-        id<MTLBuffer> _vertexBuffer;
-        id<MTLBuffer> _texcoordBuffer;
-    
-        id<MTLArgumentEncoder> _argumentEncoder;
-        id<MTLBuffer> _argumentEncoderBuffer;
-    
-        MTLRenderPipelineDescriptor *_renderPipelineDescriptor;
-    
-        CGRect _frame;
-        double _starttime;
-    
-        bool _framebufferOnly;
-    
-        NSString *_prefix;
+        NSString *prefix;
     
         bool setupShader() {
             
-            id<MTLFunction> vertexFunction  = [_library newFunctionWithName:(_prefix&&_prefix.length>0)?[NSString stringWithFormat:@"%@%@",_prefix,@"VertexShader"]:@"vertexShader"];
+            id<MTLFunction> vertexFunction  = [this->library newFunctionWithName:(this->prefix&&this->prefix.length>0)?[NSString stringWithFormat:@"%@%@",this->prefix,@"VertexShader"]:@"vertexShader"];
             if(!vertexFunction) return nil;
             
-            id<MTLFunction> fragmentFunction = [_library newFunctionWithName:(_prefix&&_prefix.length>0)?[NSString stringWithFormat:@"%@%@",_prefix,@"FragmentShader"]:@"fragmentShader"];
+            id<MTLFunction> fragmentFunction = [this->library newFunctionWithName:(this->prefix&&this->prefix.length>0)?[NSString stringWithFormat:@"%@%@",this->prefix,@"FragmentShader"]:@"fragmentShader"];
             if(!fragmentFunction) return nil;
             
-            if(_renderPipelineDescriptor==nil) {
-                _renderPipelineDescriptor = [MTLRenderPipelineDescriptor new];
-                if(!_renderPipelineDescriptor) return nil;
+            if(this->renderPipelineDescriptor==nil) {
+                this->renderPipelineDescriptor = [MTLRenderPipelineDescriptor new];
+                if(!this->renderPipelineDescriptor) return nil;
                 
-                _argumentEncoder = [fragmentFunction newArgumentEncoderWithBufferIndex:0];
+                this->argumentEncoder = [fragmentFunction newArgumentEncoderWithBufferIndex:0];
             }
             
-            _renderPipelineDescriptor.depthAttachmentPixelFormat      = MTLPixelFormatInvalid;
-            _renderPipelineDescriptor.stencilAttachmentPixelFormat    = MTLPixelFormatInvalid;
-            _renderPipelineDescriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+            this->renderPipelineDescriptor.depthAttachmentPixelFormat      = MTLPixelFormatInvalid;
+            this->renderPipelineDescriptor.stencilAttachmentPixelFormat    = MTLPixelFormatInvalid;
+            this->renderPipelineDescriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
             
-            if(_prefix&&_prefix.length>0) {
+            if(this->prefix&&this->prefix.length>0) {
                 
-                MTLRenderPipelineColorAttachmentDescriptor *colorAttachment = _renderPipelineDescriptor.colorAttachments[0];
+                MTLRenderPipelineColorAttachmentDescriptor *colorAttachment = this->renderPipelineDescriptor.colorAttachments[0];
                 colorAttachment.blendingEnabled = NO;
                 
             }
             else {
                 
-                MTLRenderPipelineColorAttachmentDescriptor *colorAttachment = _renderPipelineDescriptor.colorAttachments[0];
+                MTLRenderPipelineColorAttachmentDescriptor *colorAttachment = this->renderPipelineDescriptor.colorAttachments[0];
                 colorAttachment.blendingEnabled = YES;
                 colorAttachment.rgbBlendOperation = MTLBlendOperationAdd;
                 colorAttachment.alphaBlendOperation = MTLBlendOperationAdd;
@@ -97,75 +146,67 @@ class MetalLayer {
                 colorAttachment.destinationAlphaBlendFactor = MTLBlendFactorOne;
             }
             
-            _renderPipelineDescriptor.sampleCount = 1;
+            this->renderPipelineDescriptor.sampleCount = 1;
             
-            _renderPipelineDescriptor.vertexFunction = vertexFunction;
-            _renderPipelineDescriptor.fragmentFunction = fragmentFunction;
+            this->renderPipelineDescriptor.vertexFunction = vertexFunction;
+            this->renderPipelineDescriptor.fragmentFunction = fragmentFunction;
             
             NSError *error = nil;
-            _renderPipelineState = [_device newRenderPipelineStateWithDescriptor:_renderPipelineDescriptor error:&error];
-            if(error||!_renderPipelineState) return true;
+            this->renderPipelineState = [this->device newRenderPipelineStateWithDescriptor:this->renderPipelineDescriptor error:&error];
+            if(error||!this->renderPipelineState) return true;
             
             return false;
         }
     
         bool setup() {
             
-            _starttime = CFAbsoluteTimeGetCurrent();
+            this->metalLayer =  [CAMetalLayer layer];
+            this->device = MTLCreateSystemDefaultDevice();
             
-            _metalLayer =  [CAMetalLayer layer];
-            _device = MTLCreateSystemDefaultDevice();
+            this->metalLayer.device = this->device;
+            this->metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+            this->metalLayer.frame = this->rect;
+            this->metalLayer.colorspace = [[NSScreen mainScreen] colorSpace].CGColorSpace;
             
-            _metalLayer.device = _device;
-            _metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-            _metalLayer.frame = _frame;
-            _metalLayer.colorspace = [[NSScreen mainScreen] colorSpace].CGColorSpace;
+            this->metalLayer.opaque = NO;
+            this->metalLayer.framebufferOnly = (this->framebufferOnly)?YES:NO;
+            this->metalLayer.displaySyncEnabled = YES;
             
-            _metalLayer.opaque = NO;
-            _metalLayer.framebufferOnly = (_framebufferOnly)?YES:NO;
-            _metalLayer.displaySyncEnabled = YES;
-            
-            _commandQueue = [_device newCommandQueue];
-            if(!_commandQueue) return false;
+            this->commandQueue = [this->device newCommandQueue];
+            if(!this->commandQueue) return false;
             
             NSError *error = nil;
-            _library = [_device newLibraryWithFile:_filename error:&error];
-            if(error||!_library) return false;
+            this->library = [this->device newLibraryWithFile:this->filename error:&error];
+            if(error||!this->library) return false;
             
             if(this->setupShader()) return false;
             
-            MTLTextureDescriptor *texDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:_frame.size.width height:_frame.size.height mipmapped:NO];
+            MTLTextureDescriptor *texDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:this->rect.size.width height:this->rect.size.height mipmapped:NO];
             if(!texDesc) return false;
             
-            _texture = [_device newTextureWithDescriptor:texDesc];
-            if(!_texture)  return false;
+            this->textureBuffer = [this->device newTextureWithDescriptor:texDesc];
+            if(!this->textureBuffer)  return false;
             
-            _timeBuffer = [_device newBufferWithLength:sizeof(float) options:MTLResourceOptionCPUCacheModeDefault];
-            if(!_timeBuffer) return false;
+            this->resolutionBuffer = [this->device newBufferWithLength:sizeof(float)*2 options:MTLResourceOptionCPUCacheModeDefault];
+            if(!this->resolutionBuffer) return false;
             
-            _resolutionBuffer = [_device newBufferWithLength:sizeof(float)*2 options:MTLResourceOptionCPUCacheModeDefault];
-            if(!_resolutionBuffer) return false;
+            float *resolutionBuffer = (float *)[this->resolutionBuffer contents];
+            resolutionBuffer[0] = this->rect.size.width;
+            resolutionBuffer[1] = this->rect.size.height;
             
-            float *resolutionBuffer = (float *)[_resolutionBuffer contents];
-            resolutionBuffer[0] = _frame.size.width;
-            resolutionBuffer[1] = _frame.size.height;
+            this->vertexBuffer = [this->device newBufferWithBytes:Plane::vertexData length:6*sizeof(float)*4 options:MTLResourceOptionCPUCacheModeDefault];
+            if(!this->vertexBuffer) return false;
             
-            _mouseBuffer = [_device newBufferWithLength:sizeof(float)*2 options:MTLResourceOptionCPUCacheModeDefault];
-            if(!_mouseBuffer) return false;
+            this->texcoordBuffer = [this->device newBufferWithBytes:Plane::textureCoordinateData length:6*sizeof(float)*2 options:MTLResourceOptionCPUCacheModeDefault];
+            if(!this->texcoordBuffer) return false;
             
-            _vertexBuffer = [_device newBufferWithBytes:Plane::vertexData length:6*sizeof(float)*4 options:MTLResourceOptionCPUCacheModeDefault];
-            if(!_vertexBuffer) return false;
+            this->argumentEncoderBuffer = [this->device newBufferWithLength:sizeof(float)*[this->argumentEncoder encodedLength] options:MTLResourceOptionCPUCacheModeDefault];
+            [this->argumentEncoder setArgumentBuffer:this->argumentEncoderBuffer offset:0];
             
-            _texcoordBuffer = [_device newBufferWithBytes:Plane::textureCoordinateData length:6*sizeof(float)*2 options:MTLResourceOptionCPUCacheModeDefault];
-            if(!_texcoordBuffer) return false;
-            
-            _argumentEncoderBuffer = [_device newBufferWithLength:sizeof(float)*[_argumentEncoder encodedLength] options:MTLResourceOptionCPUCacheModeDefault];
-            [_argumentEncoder setArgumentBuffer:_argumentEncoderBuffer offset:0];
-            
-            [_argumentEncoder setBuffer:_timeBuffer offset:0 atIndex:0];
-            [_argumentEncoder setBuffer:_resolutionBuffer offset:0 atIndex:1];
-            [_argumentEncoder setBuffer:_mouseBuffer offset:0 atIndex:2];
-            [_argumentEncoder setTexture:_texture atIndex:3];
+            [this->argumentEncoder setBuffer:MetalUniform::$()->time() offset:0 atIndex:0];
+            [this->argumentEncoder setBuffer:this->resolutionBuffer offset:0 atIndex:1];
+            [this->argumentEncoder setBuffer:MetalUniform::$()->mouse() offset:0 atIndex:2];
+            [this->argumentEncoder setTexture:this->textureBuffer atIndex:3];
             
             return true;
             
@@ -173,64 +214,51 @@ class MetalLayer {
     
         id<MTLCommandBuffer> setupCommandBuffer() {
             
-            if(!_metalDrawable) {
-                _metalDrawable = [_metalLayer nextDrawable];
+            if(!this->metalDrawable) {
+                this->metalDrawable = [this->metalLayer nextDrawable];
             }
             
-            if(!_metalDrawable) {
-                _renderPassDescriptor = nil;
+            if(!this->metalDrawable) {
+                this->renderPassDescriptor = nil;
             }
             else {
-                if(_renderPassDescriptor == nil) {
-                    _renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
+                if(this->renderPassDescriptor == nil) {
+                    this->renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
                 }
             }
             
-            if(_metalDrawable&&_renderPassDescriptor) {
+            if(this->metalDrawable&&this->renderPassDescriptor) {
                 
-                id<MTLCommandBuffer> commandBuffer = [_commandQueue commandBuffer];
+                id<MTLCommandBuffer> commandBuffer = [this->commandQueue commandBuffer];
                 
-                float *timeBuffer = (float *)[_timeBuffer contents];
-                timeBuffer[0] = CFAbsoluteTimeGetCurrent()-_starttime;
                 
-                float *mouseBuffer = (float *)[_mouseBuffer contents];
-                
-                double x = _frame.origin.x;
-                double y = _frame.origin.y;
-                double w = _frame.size.width;
-                double h = _frame.size.height;
-                
-                NSPoint mouseLoc = [NSEvent mouseLocation];
-                mouseBuffer[0] = (mouseLoc.x-x)/w;
-                mouseBuffer[1] = (mouseLoc.y-y)/h;
-                
-                MTLRenderPassColorAttachmentDescriptor *colorAttachment = _renderPassDescriptor.colorAttachments[0];
-                colorAttachment.texture = _metalDrawable.texture;
+                MTLRenderPassColorAttachmentDescriptor *colorAttachment = this->renderPassDescriptor.colorAttachments[0];
+                colorAttachment.texture = this->metalDrawable.texture;
                 colorAttachment.loadAction  = MTLLoadActionClear;
                 colorAttachment.clearColor  = MTLClearColorMake(0.0f,0.0f,0.0f,0.0f);
                 colorAttachment.storeAction = MTLStoreActionStore;
                 
-                id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:_renderPassDescriptor];
+                id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:this->renderPassDescriptor];
                 
                 [renderEncoder setFrontFacingWinding:MTLWindingCounterClockwise];
-                [renderEncoder setRenderPipelineState:_renderPipelineState];
+                [renderEncoder setRenderPipelineState:this->renderPipelineState];
                 
-                [renderEncoder setVertexBuffer:_vertexBuffer offset:0 atIndex:0];
-                [renderEncoder setVertexBuffer:_texcoordBuffer offset:0 atIndex:1];
+                [renderEncoder setVertexBuffer:this->vertexBuffer offset:0 atIndex:0];
+                [renderEncoder setVertexBuffer:this->texcoordBuffer offset:0 atIndex:1];
                 
-                [renderEncoder useResource:_timeBuffer usage:MTLResourceUsageRead];
-                [renderEncoder useResource:_resolutionBuffer usage:MTLResourceUsageRead];
-                [renderEncoder useResource:_mouseBuffer usage:MTLResourceUsageRead];
+                [renderEncoder useResource:MetalUniform::$()->time() usage:MTLResourceUsageRead];
+                [renderEncoder useResource:this->resolutionBuffer usage:MTLResourceUsageRead];
+                [renderEncoder useResource:MetalUniform::$()->mouse() usage:MTLResourceUsageRead];
                 
-                [renderEncoder useResource:_texture usage:MTLResourceUsageSample];
+                [renderEncoder useResource:this->textureBuffer usage:MTLResourceUsageSample];
                 
-                [renderEncoder setFragmentBuffer:_argumentEncoderBuffer offset:0 atIndex:0];
+                [renderEncoder setFragmentBuffer:this->argumentEncoderBuffer offset:0 atIndex:0];
                 
                 [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6 instanceCount:1];
                 [renderEncoder endEncoding];
-                [commandBuffer presentDrawable:_metalDrawable];
+                [commandBuffer presentDrawable:this->metalDrawable];
                 
-                _drawabletexture = _metalDrawable.texture;
+                this->drawabletexture = this->metalDrawable.texture;
                 
                 return commandBuffer;
             }
@@ -240,32 +268,32 @@ class MetalLayer {
     
     public:
     
-        CGRect frame() { return _frame; }
+        CGRect frame() { return this->rect; }
     
-        CAMetalLayer *layer() { return _metalLayer; };
+        CAMetalLayer *layer() { return this->metalLayer; };
     
-        id<MTLTexture> texture() { return _texture; }
+        id<MTLTexture> texture() { return this->textureBuffer; }
 
         void texture(id<MTLTexture> texture) {
-            [_argumentEncoder setTexture:texture atIndex:3];
+            [this->argumentEncoder setTexture:texture atIndex:3];
         }
         
-        id<MTLTexture> drawableTexture() { return _drawabletexture; }
+        id<MTLTexture> drawableTexture() { return this->drawabletexture; }
         
-        void cleanup() { _metalDrawable = nil; }
+        void cleanup() { this->metalDrawable = nil; }
     
         MetalLayer(NSString *fileName, NSString *prefix, CGRect frame, bool framebuffer) {
             
-            _filename = [NSMutableString stringWithString:[[NSBundle mainBundle] pathForResource:fileName ofType:@"metallib"]];
-            _frame = frame;
-            _framebufferOnly = framebuffer;
-            _prefix = prefix;
+            this->filename = [NSMutableString stringWithString:[[NSBundle mainBundle] pathForResource:fileName ofType:@"metallib"]];
+            this->rect = frame;
+            this->framebufferOnly = framebuffer;
+            this->prefix = prefix;
             this->setup();
         }
                  
          void update(void (^onComplete)(id<MTLCommandBuffer>)=nil) {
              
-             if(_renderPipelineState) {
+             if(this->renderPipelineState) {
                  id<MTLCommandBuffer> commandBuffer = this->setupCommandBuffer();
                  if(commandBuffer) {
                      if(onComplete) [commandBuffer addCompletedHandler:onComplete];
