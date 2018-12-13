@@ -181,7 +181,7 @@ class MetalLayerBase {
             
             if(this->setupShader()) return false;
             
-            MTLTextureDescriptor *texDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:this->rect.size.width height:this->rect.size.height mipmapped:NO];
+            MTLTextureDescriptor *texDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:this->rect.size.width height:this->rect.size.height mipmapped:NO];
             if(!texDesc) return false;
             
             this->textureBuffer = [this->device newTextureWithDescriptor:texDesc];

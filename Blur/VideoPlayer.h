@@ -105,13 +105,10 @@ class VideoPlayer {
 						
 						for(int j=0; j<w; j++) {
 							
-							unsigned int argb = *src++;
-							
-							*dst++ = (0xFF000000|(argb&0xFF)<<16|(argb&0xFF00)|((argb>>16)&0xFF));
+							*dst++ = *src++;
 							
 						}
 					}
-					
 				}
 			}
 			
